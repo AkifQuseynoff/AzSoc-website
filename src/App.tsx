@@ -64,6 +64,10 @@ export default function App() {
     }
   }, [profile, page])
 
+  useEffect(() => {
+    if (page === 'admin' && profile?.role !== 'admin') setPage('site')
+  }, [profile, page])
+
   if (authLoading) return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a1a42', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <img src={logoSrc} alt="Loading" style={{ width: 80, height: 80, borderRadius: '50%', opacity: 0.7, animation: 'spin 1.5s linear infinite' }} />
@@ -74,9 +78,14 @@ export default function App() {
   if (page === 'login') return <LoginPage onBack={() => setPage('site')} />
   if (page === 'admin') return <AdminDashboard onBack={() => setPage('site')} />
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setSubmitted(true)
+    try {
+      await api.createContactMessage(formData)
+      setSubmitted(true)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to send your message. Please try again.')
+    }
   }
 
   return (
@@ -108,7 +117,7 @@ export default function App() {
                   </a>
             ))}
             {/* Auth button */}
-            {profile ? (
+            {profile?.role === 'admin' ? (
               <button onClick={() => setPage('admin')} style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#c9a84c', background: 'none', border: '1px solid rgba(201,168,76,0.5)', padding: '7px 16px', borderRadius: 4, cursor: 'pointer', transition: 'all 0.2s' }}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(201,168,76,0.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}>
@@ -139,7 +148,7 @@ export default function App() {
               </a>
             ))}
             <button onClick={() => { setMenuOpen(false); setPage('login') }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 0', fontSize: 15, fontWeight: 500, color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
-              {profile ? '⚙ Admin' : 'Sign In'}
+              {profile?.role === 'admin' ? '⚙ Admin' : 'Sign In'}
             </button>
           </div>
         )}

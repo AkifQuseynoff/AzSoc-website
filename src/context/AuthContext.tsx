@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type Profile } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 type AuthState = {
   token: string | null;
@@ -9,7 +10,7 @@ type AuthState = {
 
 type AuthContextType = AuthState & {
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, full_name: string) => Promise<void>;
+  register: (email: string, password: string, fullName: string) => Promise<{ requiresEmailConfirmation: boolean }>;
   logout: () => void;
 };
 
@@ -19,38 +20,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ token: null, profile: null, loading: true });
 
   useEffect(() => {
-    const token = localStorage.getItem("azsoc_token");
-    if (token) {
-      api.me(token)
-        .then(({ profile }) => setState({ token, profile, loading: false }))
-        .catch(() => { localStorage.removeItem("azsoc_token"); setState({ token: null, profile: null, loading: false }); });
-    } else {
-      setState(s => ({ ...s, loading: false }));
+    let active = true;
+
+    async function restoreSession() {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        if (active) setState({ token: null, profile: null, loading: false });
+        return;
+      }
+      try {
+        const { profile } = await api.me(data.session.access_token);
+        if (active) setState({ token: data.session.access_token, profile, loading: false });
+      } catch {
+        if (active) setState({ token: null, profile: null, loading: false });
+      }
     }
+
+    restoreSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" && active) setState({ token: null, profile: null, loading: false });
+    });
+
+    return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
 
   async function login(email: string, password: string) {
     const { session, profile } = await api.login(email, password);
-    localStorage.setItem("azsoc_token", session.access_token);
     setState({ token: session.access_token, profile, loading: false });
   }
 
-  async function register(email: string, password: string, full_name: string) {
-    const { session, profile } = await api.register(email, password, full_name);
-    localStorage.setItem("azsoc_token", session.access_token);
-    setState({ token: session.access_token, profile, loading: false });
+  async function register(email: string, password: string, fullName: string) {
+    const { session, profile } = await api.register(email, password, fullName);
+    if (session && profile) setState({ token: session.access_token, profile, loading: false });
+    return { requiresEmailConfirmation: !session };
   }
 
   function logout() {
-    localStorage.removeItem("azsoc_token");
+    void supabase.auth.signOut();
     setState({ token: null, profile: null, loading: false });
   }
 
-  return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ ...state, login, register, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

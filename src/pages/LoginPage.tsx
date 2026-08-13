@@ -9,6 +9,7 @@ export default function LoginPage({ onBack }: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [form, setForm] = useState({ email: "", password: "", full_name: "", confirm: "" });
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -17,6 +18,7 @@ export default function LoginPage({ onBack }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setMessage("");
     if (mode === "register" && form.password !== form.confirm) {
       setError("Passwords do not match.");
       return;
@@ -30,7 +32,11 @@ export default function LoginPage({ onBack }: Props) {
       if (mode === "login") {
         await login(form.email, form.password);
       } else {
-        await register(form.email, form.password, form.full_name);
+        const { requiresEmailConfirmation } = await register(form.email, form.password, form.full_name);
+        if (requiresEmailConfirmation) {
+          setMessage("Account created. Check your email to confirm your address, then sign in.");
+          setMode("login");
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -70,7 +76,7 @@ export default function LoginPage({ onBack }: Props) {
           {/* Tabs */}
           <div style={{ display: "flex", borderBottom: "1px solid #eee" }}>
             {(["login", "register"] as const).map(m => (
-              <button key={m} onClick={() => { setMode(m); setError(""); }}
+              <button key={m} onClick={() => { setMode(m); setError(""); setMessage(""); }}
                 style={{ flex: 1, padding: "14px", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", transition: "all 0.2s", backgroundColor: mode === m ? "#fff" : "#f8f8f8", color: mode === m ? "#0f2560" : "#999", borderBottom: mode === m ? "2px solid #c9a84c" : "2px solid transparent" }}>
                 {m === "login" ? "Sign In" : "Register"}
               </button>
@@ -110,6 +116,12 @@ export default function LoginPage({ onBack }: Props) {
             {error && (
               <div style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "10px 14px", fontSize: 14, color: "#c0392b", marginBottom: 20 }}>
                 {error}
+              </div>
+            )}
+
+            {message && (
+              <div style={{ backgroundColor: "#eef8f6", border: "1px solid #bde5dc", borderRadius: 6, padding: "10px 14px", fontSize: 14, color: "#176b60", marginBottom: 20 }}>
+                {message}
               </div>
             )}
 

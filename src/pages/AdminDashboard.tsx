@@ -92,7 +92,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setDeleteConfirm(null);
   }
 
-  async function changeRole(id: string, role: string) {
+  async function changeRole(id: string, role: Profile["role"]) {
     if (!token) return;
     try { await api.updateMemberRole(token, id, role); await loadData(); } catch {}
   }
