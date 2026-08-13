@@ -1,0 +1,10 @@
+{
+  "description": "Provides a dedicated online platform for the Azerbaijan Society at the University of Edinburgh to share events, news, and connect members effectively.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
