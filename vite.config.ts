@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
-import siteConfiguration from './.figma/make/site.json'
+// site.json removed during cleanup; use empty config when missing
+const siteConfiguration = {}
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
