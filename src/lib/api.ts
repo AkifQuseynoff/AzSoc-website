@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export type Profile = {
   id: string;
@@ -49,6 +50,15 @@ function requireConfiguration() {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env.local.");
   }
+}
+
+function clientForToken(token?: string) {
+  // For client-side operations, prefer the existing `supabase` instance which
+  // maintains the browser auth session. Creating a new client with the anon
+  // key plus an Authorization header may not establish the same auth context
+  // for Storage RLS. If no token provided, return the anon client.
+  if (!token) return supabase;
+  return supabase;
 }
 
 function throwIfError(error: { message: string } | null) {
@@ -105,22 +115,51 @@ export const api = {
 
   createEvent: async (_token: string | undefined, event: Omit<AzEvent, "id" | "created_at">) => {
     requireConfiguration();
-    const { data, error } = await supabase.from("events").insert(event).select().single();
+    const client = clientForToken(_token);
+    const { data, error } = await client.from("events").insert(event).select().single();
     throwIfError(error);
     return { event: data as AzEvent };
   },
 
   updateEvent: async (_token: string | undefined, id: string, event: Partial<AzEvent>) => {
     requireConfiguration();
-    const { data, error } = await supabase.from("events").update(event).eq("id", id).select().single();
+    const client = clientForToken(_token);
+    const { data, error } = await client.from("events").update(event).eq("id", id).select().single();
     throwIfError(error);
     return { event: data as AzEvent };
   },
 
   deleteEvent: async (_token: string | undefined, id: string) => {
     requireConfiguration();
-    const { error } = await supabase.from("events").delete().eq("id", id);
+    const client = clientForToken(_token);
+    const { error } = await client.from("events").delete().eq("id", id);
     throwIfError(error);
+    return { ok: true };
+  },
+
+  uploadToStorage: async (_token: string | undefined, bucket: string, path: string, file: any) => {
+    requireConfiguration();
+    const client = clientForToken(_token);
+    // upload only; return the storage path so the app can reference it from the bucket
+    const { error: uploadError } = await client.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: true });
+    if (uploadError) throw uploadError;
+    return { path };
+  },
+  downloadFromStorage: async (_token: string | undefined, bucket: string, path: string) => {
+    requireConfiguration();
+    const client = clientForToken(_token);
+    const { data, error } = await client.storage.from(bucket).download(path);
+    if (error) throw error;
+    // convert to object URL for immediate use in <img>
+    const blob = await data.arrayBuffer().then(buf => new Blob([buf]));
+    const objectUrl = URL.createObjectURL(blob);
+    return { url: objectUrl };
+  },
+  deleteFromStorage: async (_token: string | undefined, bucket: string, path: string) => {
+    requireConfiguration();
+    const client = clientForToken(_token);
+    const { error } = await client.storage.from(bucket).remove([path]);
+    if (error) throw error;
     return { ok: true };
   },
 
@@ -147,14 +186,16 @@ export const api = {
 
   getMembers: async (_token: string | undefined) => {
     requireConfiguration();
-    const { data, error } = await supabase.from("profiles").select("id, email, full_name, role, created_at").order("created_at", { ascending: true });
+    const client = clientForToken(_token);
+    const { data, error } = await client.from("profiles").select("id, email, full_name, role, created_at").order("created_at", { ascending: true });
     throwIfError(error);
     return { members: (data || []) as Profile[] };
   },
 
   updateMemberRole: async (_token: string | undefined, id: string, role: "admin" | "member") => {
     requireConfiguration();
-    const { data, error } = await supabase.from("profiles").update({ role }).eq("id", id).select("id, email, full_name, role, created_at").single();
+    const client = clientForToken(_token);
+    const { data, error } = await client.from("profiles").update({ role }).eq("id", id).select("id, email, full_name, role, created_at").single();
     throwIfError(error);
     return { member: data as Profile };
   },
@@ -190,6 +231,13 @@ export const api = {
   createContactMessage: async (message: Omit<ContactMessage, "id" | "created_at">) => {
     requireConfiguration();
     const { error } = await supabase.from("contact_messages").insert(message);
+    throwIfError(error);
+    return { ok: true };
+  },
+  deleteContactMessage: async (_token: string | undefined, id: string) => {
+    requireConfiguration();
+    const client = clientForToken(_token);
+    const { error } = await client.from('contact_messages').delete().eq('id', id);
     throwIfError(error);
     return { ok: true };
   },

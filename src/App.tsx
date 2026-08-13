@@ -4,12 +4,11 @@ import { useAuth } from '@/context/AuthContext'
 import LoginPage from '@/pages/LoginPage'
 import AdminDashboard from '@/pages/AdminDashboard'
 import { api, type AzEvent, type CommitteeMember } from '@/lib/api'
-import { isSupabaseConfigured } from '@/lib/supabase'
+import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 
 const NAV_LINKS = [
   { label: 'About', href: '#about' },
   { label: 'Events', href: '#events' },
-  { label: 'Gallery', href: '#gallery' },
   { label: 'Committee', href: '#committee' },
   { label: 'Join Us', href: '#join' },
   { label: 'Contact', href: '#contact' },
@@ -46,6 +45,7 @@ export default function App() {
   const [eventsLoading, setEventsLoading] = useState(true)
   const [registeredEventIds, setRegisteredEventIds] = useState<Set<string>>(new Set())
   const [selectedEvent, setSelectedEvent] = useState<AzEvent | null>(null)
+  const [eventImageMap, setEventImageMap] = useState<Record<string, string>>({})
   const [registering, setRegistering] = useState(false)
   const [registrationError, setRegistrationError] = useState('')
   const [formData, setFormData] = useState({ name: '', email: '', year: '', message: '' })
@@ -69,6 +69,30 @@ export default function App() {
       .catch(() => {})
       .finally(() => setEventsLoading(false))
   }, [])
+
+  useEffect(() => {
+    let mounted = true;
+    const urlsCreated: string[] = [];
+    async function fetchImages() {
+      for (const ev of events) {
+        if (!ev.image_url) continue;
+        if (/^https?:\/\//i.test(ev.image_url)) {
+          setEventImageMap(prev => ({ ...prev, [ev.id]: ev.image_url as string }));
+          continue;
+        }
+        try {
+          const { url } = await api.downloadFromStorage(undefined, 'events', ev.image_url as string);
+          if (!mounted) { URL.revokeObjectURL(url); break; }
+          urlsCreated.push(url);
+          setEventImageMap(prev => ({ ...prev, [ev.id]: url }));
+        } catch (_e) {
+          // ignore download errors
+        }
+      }
+    }
+    fetchImages();
+    return () => { mounted = false; urlsCreated.forEach(u => URL.revokeObjectURL(u)); };
+  }, [events])
 
   useEffect(() => {
     if (!profile) {
@@ -104,8 +128,10 @@ export default function App() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     try {
-      await api.createContactMessage(formData)
+      const payload = profile ? { name: profile.full_name || '', email: profile.email, year: '', message: formData.message } : formData
+      await api.createContactMessage(payload)
       setSubmitted(true)
+      setFormData({ name: '', email: '', year: '', message: '' })
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Unable to send your message. Please try again.')
     }
@@ -302,7 +328,11 @@ export default function App() {
                   style={{ backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 16px rgba(15,37,96,0.08)', transition: 'all 0.25s', cursor: 'pointer', borderTop: `4px solid ${event.tag_color}` }}
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 36px rgba(15,37,96,0.15)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 16px rgba(15,37,96,0.08)' }}>
-                  {event.image_url && <img src={event.image_url} alt={event.title} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />}
+                  {event.image_url && (() => {
+                    const isUrl = /^https?:\/\//i.test(event.image_url || '');
+                    const src = isUrl ? event.image_url : eventImageMap[event.id];
+                    return src ? <img src={src} alt={event.title} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} /> : null;
+                  })()}
                   <div style={{ padding: '28px 28px 24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: event.tag_color, backgroundColor: `${event.tag_color}15`, padding: '4px 10px', borderRadius: 3 }}>{event.tag}</span>
@@ -320,40 +350,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* ── GALLERY ── */}
-      <section id="gallery" style={{ backgroundColor: '#0f2560', padding: 'clamp(60px, 8vw, 100px) 24px', position: 'relative', overflow: 'hidden' }}>
-        <svg style={{ position: 'absolute', right: -60, top: '50%', transform: 'translateY(-50%)', opacity: 0.04, width: 500, height: 500 }} viewBox="0 0 200 200">
-          <circle cx="100" cy="100" r="90" fill="none" stroke="#c9a84c" strokeWidth="3" />
-          <path d="M120,55 Q145,100 120,145 Q90,125 90,100 Q90,75 120,55Z" fill="#c9a84c" />
-          <polygon points="130,70 135,82 148,82 138,90 142,102 130,94 118,102 122,90 112,82 125,82" fill="#c9a84c" />
-        </svg>
-        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#c9a84c', fontWeight: 700, marginBottom: 14 }}>Our Two Homes</div>
-            <h2 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 'clamp(34px, 4vw, 52px)', fontWeight: 700, color: '#fff', lineHeight: 1.1 }}>Baku meets Edinburgh</h2>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
-            {[
-              { url: 'https://images.unsplash.com/photo-1596306499398-8d88944a5ec4?w=700&h=480&fit=crop&auto=format', alt: 'Baku skyline with Flame Towers', label: 'Baku, Azerbaijan' },
-              { url: 'https://images.unsplash.com/photo-1506377585622-bedcbb027afc?w=700&h=480&fit=crop&auto=format', alt: 'Edinburgh from Calton Hill', label: 'Edinburgh, Scotland' },
-              { url: 'https://images.unsplash.com/photo-1616701639706-a89d1a609eda?w=700&h=480&fit=crop&auto=format', alt: 'Architecture in Baku', label: 'Old City, Baku' },
-              { url: 'https://images.unsplash.com/photo-1595599014147-a419c147bdc0?w=700&h=480&fit=crop&auto=format', alt: 'University of Edinburgh building', label: 'University of Edinburgh' },
-            ].map(img => (
-              <div key={img.label} style={{ position: 'relative', borderRadius: 6, overflow: 'hidden', aspectRatio: '4/3' }}
-                onMouseEnter={e => { const o = e.currentTarget.querySelector('.photo-overlay') as HTMLElement; if (o) o.style.opacity = '1' }}
-                onMouseLeave={e => { const o = e.currentTarget.querySelector('.photo-overlay') as HTMLElement; if (o) o.style.opacity = '0' }}>
-                <img src={img.url} alt={img.alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                <div className="photo-overlay" style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15,37,96,0.75)', display: 'flex', alignItems: 'flex-end', padding: 20, opacity: 0, transition: 'opacity 0.3s' }}>
-                  <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#fff', fontWeight: 600 }}>{img.label}</span>
-                </div>
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.5))', padding: '24px 16px 14px' }}>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>{img.label}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      
 
       {/* ── COMMITTEE ── */}
       <section id="committee" style={{ backgroundColor: '#fff', padding: 'clamp(60px, 8vw, 120px) 24px' }}>
@@ -442,7 +439,7 @@ export default function App() {
             ) : (
               <form onSubmit={handleSubmit}>
                 <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700, color: '#0f2560', marginBottom: 28 }}>Send a Message</h3>
-                {[
+                {!profile && [
                   { id: 'name', label: 'Full Name', type: 'text', placeholder: 'Leyla Hasanova' },
                   { id: 'email', label: 'Email Address', type: 'email', placeholder: 's1234567@ed.ac.uk' },
                   { id: 'year', label: 'Year of Study', type: 'text', placeholder: 'e.g. 2nd Year, Postgraduate…' },
@@ -478,7 +475,11 @@ export default function App() {
       {selectedEvent && (
         <div onClick={event => { if (event.target === event.currentTarget) setSelectedEvent(null) }} style={{ position: 'fixed', inset: 0, zIndex: 250, backgroundColor: 'rgba(5,15,45,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div role="dialog" aria-modal="true" aria-labelledby="event-modal-title" style={{ width: '100%', maxWidth: 560, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 28px 80px rgba(0,0,0,0.4)' }}>
-            {selectedEvent.image_url && <img src={selectedEvent.image_url} alt="" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />}
+            {selectedEvent.image_url && (() => {
+              const isUrl = /^https?:\/\//i.test(selectedEvent.image_url || '');
+              const src = isUrl ? selectedEvent.image_url : eventImageMap[selectedEvent.id];
+              return src ? <img src={src} alt="" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} /> : null;
+            })()}
             <div style={{ padding: '32px 36px 36px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'flex-start', marginBottom: 14 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: selectedEvent.tag_color, backgroundColor: `${selectedEvent.tag_color}15`, padding: '4px 10px', borderRadius: 3 }}>{selectedEvent.tag}</span>

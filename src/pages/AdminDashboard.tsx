@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api, type AzEvent, type CommitteeMember, type ContactMessage, type Profile } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import logoSrc from "@/imports/UoE_AzSoc_LOGO.png";
 
 const TAG_OPTIONS = [
@@ -27,6 +28,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AzEvent | null>(null);
   const [formData, setFormData] = useState({ ...EMPTY_EVENT });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -66,9 +69,18 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setError("");
   }
 
-  function openEdit(ev: AzEvent) {
+  async function openEdit(ev: AzEvent) {
     setEditing(ev);
     setFormData({ title: ev.title, description: ev.description, date: ev.date, location: ev.location, tag: ev.tag, tag_color: ev.tag_color, image_url: ev.image_url || "", is_featured: ev.is_featured });
+    setImageFile(null);
+    // If stored image is a storage path, resolve public URL for preview
+    if (ev.image_url) {
+      const isUrl = /^https?:\/\//i.test(ev.image_url);
+      if (isUrl) setImagePreview(ev.image_url);
+      else {
+        try { const { url } = await api.downloadFromStorage(token, 'events', ev.image_url); setImagePreview(url); } catch { setImagePreview(null); }
+      }
+    } else setImagePreview(null);
     setShowForm(true);
     setError("");
   }
@@ -78,15 +90,39 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaving(true);
     setError("");
     try {
+      const payload: any = { ...formData };
+      if (imageFile) {
+        try {
+          const filePath = `events/${Date.now()}_${imageFile.name.replace(/\s+/g, '_')}`;
+          const { path } = await api.uploadToStorage(token, 'events', filePath, imageFile);
+          // store the storage path (not a public URL)
+          payload.image_url = path;
+          // persist into formData and clear file to avoid sending File objects
+          setFormData(prev => ({ ...prev, image_url: path }));
+          // set preview to public URL for immediate display
+          try {
+            const { url } = await api.downloadFromStorage(token, 'events', path);
+            setImagePreview(url);
+          } catch (_) {
+            setImagePreview(null);
+          }
+          setImageFile(null);
+          } catch (ue: any) {
+          setError(ue?.message || 'Image upload failed');
+          setSaving(false);
+          return;
+        }
+      }
+
       if (editing) {
-        await api.updateEvent(token, editing.id, formData);
+        await api.updateEvent(token, editing.id, payload);
       } else {
-        await api.createEvent(token, formData as any);
+        await api.createEvent(token, payload as any);
       }
       setShowForm(false);
       await loadData();
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || 'Unknown error');
     } finally {
       setSaving(false);
     }
@@ -94,7 +130,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   async function deleteEvent(id: string) {
     if (!token) return;
-    try { await api.deleteEvent(token, id); await loadData(); } catch {}
+    const ev = events.find(e => e.id === id);
+    try {
+      // if event has a storage path (not a full URL), delete the object from the bucket
+      if (ev?.image_url && !/^https?:\/\//i.test(ev.image_url)) {
+        try { await api.deleteFromStorage(token, 'events', ev.image_url); } catch (_) { /* ignore storage delete errors */ }
+      }
+      await api.deleteEvent(token, id);
+      await loadData();
+    } catch (_) {}
     setDeleteConfirm(null);
   }
 
@@ -157,7 +201,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           ] as { id: Tab; icon: string; label: string }[]).map(item => (
             <button key={item.id} onClick={() => setTab(item.id)}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 6, border: "none", cursor: "pointer", marginBottom: 4, fontSize: 14, fontWeight: 500, transition: "all 0.15s", backgroundColor: tab === item.id ? "rgba(201,168,76,0.15)" : "transparent", color: tab === item.id ? "#c9a84c" : "rgba(255,255,255,0.65)" }}>
-              <span>{item.icon}</span> {item.label}
+              <span>{item.icon}</span>
+              {/* show unanswered messages count as a small badge */}
+              {item.id === 'messages' && messages.length > 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 20, height: 20, borderRadius: 20, backgroundColor: '#c9a84c', color: '#0f2560', fontWeight: 700, fontSize: 12, padding: '0 6px' }}>{messages.length}</span>
+              )}
+              {item.label}
             </button>
           ))}
         </nav>
@@ -195,7 +244,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
                 <div style={{ fontFamily: "Playfair Display, serif", fontSize: 22, color: "#0f2560", marginBottom: 8 }}>No events yet</div>
                 <p style={{ color: "#6a6a7a", marginBottom: 24 }}>Add your first event to get started.</p>
-                <button onClick={openCreate} style={{ backgroundColor: "#c9a84c", color: "#0a1a42", border: "none", padding: "12px 28px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Add Event</button>
+                  {/* single Add Event button already present in header - removed duplicate here */}
               </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
@@ -330,6 +379,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                     {message.year && <div style={{ color: "#8a8a9a", fontSize: 13, marginBottom: 10 }}>{message.year}</div>}
                     <p style={{ margin: 0, color: "#3a3a4a", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{message.message}</p>
+                    <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button onClick={async () => {
+                        if (!token) return;
+                        try {
+                          await api.deleteContactMessage(token, message.id);
+                          setMessages(prev => prev.filter(m => m.id !== message.id));
+                        } catch (e) { /* ignore */ }
+                      }} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #c9a84c', background: 'transparent', color: '#0f2560', fontWeight: 700, cursor: 'pointer' }}>Mark answered</button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -382,7 +440,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               { key: "title", label: "Event Title", type: "text", placeholder: "Novruz Cultural Evening" },
               { key: "date", label: "Date", type: "text", placeholder: "Mar 20, 2026" },
               { key: "location", label: "Location", type: "text", placeholder: "Pleasance Courtyard, Edinburgh" },
-              { key: "image_url", label: "Image URL (optional)", type: "text", placeholder: "https://images.unsplash.com/…" },
             ].map(f => (
               <div key={f.key} style={{ marginBottom: 18 }}>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#3a3a4a", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{f.label}</label>
@@ -393,6 +450,32 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   onBlur={e => (e.target.style.borderColor = "#dde")} />
               </div>
             ))}
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#3a3a4a", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Image (optional)</label>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <input type="file" accept="image/*" onChange={e => {
+                  const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                  setImageFile(f);
+                  if (f) setImagePreview(URL.createObjectURL(f));
+                }} />
+                {imagePreview ? (
+                  <div style={{ width: 96, height: 64, borderRadius: 6, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
+                    <img src={imagePreview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </div>
+                ) : formData.image_url ? (
+                  (() => {
+                    const isUrl = /^https?:\/\//i.test(formData.image_url || '');
+                    const src = isUrl ? formData.image_url : null;
+                    return src ? (
+                      <div style={{ width: 96, height: 64, borderRadius: 6, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
+                        <img src={src} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    ) : null;
+                  })()
+                ) : null}
+              </div>
+            </div>
 
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#3a3a4a", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Tag</label>
@@ -433,6 +516,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 Cancel
               </button>
             </div>
+            
           </div>
         </div>
       )}

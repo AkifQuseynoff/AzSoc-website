@@ -32,7 +32,7 @@ Deno.serve(async (request) => {
 
   const { data: registration, error: registrationError } = await supabase
     .from("event_registrations")
-    .insert({ event_id: event.id })
+    .insert({ event_id: event.id, user_id: user.id })
     .select("id, event_id, user_id, created_at")
     .single();
 
