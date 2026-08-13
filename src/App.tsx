@@ -3,7 +3,8 @@ import logoSrc from '@/imports/UoE_AzSoc_LOGO.png'
 import { useAuth } from '@/context/AuthContext'
 import LoginPage from '@/pages/LoginPage'
 import AdminDashboard from '@/pages/AdminDashboard'
-import { api, type AzEvent } from '@/lib/api'
+import { api, type AzEvent, type CommitteeMember } from '@/lib/api'
+import { isSupabaseConfigured } from '@/lib/supabase'
 
 const NAV_LINKS = [
   { label: 'About', href: '#about' },
@@ -23,24 +24,30 @@ const FALLBACK_EVENTS: AzEvent[] = [
   { id: '6', title: 'Language Exchange Café', description: 'A casual café session pairing Azerbaijani and Scottish students for language exchange, coffee, and conversation.', date: 'Jan 18, 2026', location: 'Café Nero, South Bridge', tag: 'Language', tag_color: '#2a9d8f', is_featured: false, created_at: '' },
 ]
 
-const COMMITTEE = [
-  { name: 'Leyla Hasanova', role: 'President', initial: 'LH' },
-  { name: 'Elçin Mammadov', role: 'Vice President', initial: 'EM' },
-  { name: 'Nigar Aliyeva', role: 'Events Director', initial: 'NA' },
-  { name: 'Kamran Huseynov', role: 'Treasurer', initial: 'KH' },
-  { name: 'Aynur Qasımova', role: 'Social Secretary', initial: 'AQ' },
-  { name: 'Tural Rzayev', role: 'Outreach Officer', initial: 'TR' },
+const FALLBACK_COMMITTEE: CommitteeMember[] = [
+  { id: '1', name: 'Leyla Hasanova', role: 'President', display_order: 1, created_at: '' },
+  { id: '2', name: 'Elçin Mammadov', role: 'Vice President', display_order: 2, created_at: '' },
+  { id: '3', name: 'Nigar Aliyeva', role: 'Events Director', display_order: 3, created_at: '' },
+  { id: '4', name: 'Kamran Huseynov', role: 'Treasurer', display_order: 4, created_at: '' },
+  { id: '5', name: 'Aynur Qasımova', role: 'Social Secretary', display_order: 5, created_at: '' },
+  { id: '6', name: 'Tural Rzayev', role: 'Outreach Officer', display_order: 6, created_at: '' },
 ]
 
 type Page = 'site' | 'login' | 'admin'
 
 export default function App() {
-  const { profile, loading: authLoading } = useAuth()
+  const { profile, loading: authLoading, logout } = useAuth()
   const [page, setPage] = useState<Page>('site')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [memberMenuOpen, setMemberMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const [events, setEvents] = useState<AzEvent[]>(FALLBACK_EVENTS)
+  const [events, setEvents] = useState<AzEvent[]>(isSupabaseConfigured ? [] : FALLBACK_EVENTS)
+  const [committee, setCommittee] = useState<CommitteeMember[]>(FALLBACK_COMMITTEE)
   const [eventsLoading, setEventsLoading] = useState(true)
+  const [registeredEventIds, setRegisteredEventIds] = useState<Set<string>>(new Set())
+  const [selectedEvent, setSelectedEvent] = useState<AzEvent | null>(null)
+  const [registering, setRegistering] = useState(false)
+  const [registrationError, setRegistrationError] = useState('')
   const [formData, setFormData] = useState({ name: '', email: '', year: '', message: '' })
   const [submitted, setSubmitted] = useState(false)
 
@@ -51,11 +58,27 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    api.getCommitteeMembers()
+      .then(({ members }) => { if (members?.length) setCommittee(members) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     api.getEvents()
-      .then(({ events: data }) => { if (data?.length) setEvents(data) })
+      .then(({ events: data }) => { setEvents(data || []) })
       .catch(() => {})
       .finally(() => setEventsLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!profile) {
+      setRegisteredEventIds(new Set())
+      return
+    }
+    api.getMyEventRegistrations()
+      .then(({ registrations }) => setRegisteredEventIds(new Set(registrations.map(registration => registration.event_id))))
+      .catch(() => setRegisteredEventIds(new Set()))
+  }, [profile])
 
   // Auto-redirect admin to dashboard
   useEffect(() => {
@@ -85,6 +108,25 @@ export default function App() {
       setSubmitted(true)
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Unable to send your message. Please try again.')
+    }
+  }
+
+  async function registerForSelectedEvent() {
+    if (!selectedEvent) return
+    if (!profile) {
+      setSelectedEvent(null)
+      setPage('login')
+      return
+    }
+    setRegistering(true)
+    setRegistrationError('')
+    try {
+      await api.registerForEvent(selectedEvent.id)
+      setRegisteredEventIds(previous => new Set(previous).add(selectedEvent.id))
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : 'Unable to register for this event.')
+    } finally {
+      setRegistering(false)
     }
   }
 
@@ -123,6 +165,18 @@ export default function App() {
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}>
                 ⚙ Admin
               </button>
+            ) : profile ? (
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setMemberMenuOpen(open => !open)} title={`Signed in as ${profile.full_name || profile.email}`} aria-label="Open account menu" aria-expanded={memberMenuOpen} style={{ width: 34, height: 34, borderRadius: '50%', backgroundColor: '#c9a84c', color: '#0a1a42', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, border: '2px solid rgba(255,255,255,0.35)', cursor: 'pointer' }}>
+                  {(profile.full_name || profile.email).trim().charAt(0).toUpperCase()}
+                </button>
+                {memberMenuOpen && (
+                  <div style={{ position: 'absolute', right: 0, top: 42, minWidth: 190, padding: 8, backgroundColor: '#fff', borderRadius: 6, boxShadow: '0 8px 28px rgba(0,0,0,0.2)', border: '1px solid #eee' }}>
+                    <div style={{ padding: '7px 10px 9px', fontSize: 12, color: '#6a6a7a', borderBottom: '1px solid #eee', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name || profile.email}</div>
+                    <button onClick={() => { logout(); setMemberMenuOpen(false) }} style={{ width: '100%', padding: '8px 10px', border: 'none', background: 'none', textAlign: 'left', color: '#c0392b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Sign Out</button>
+                  </div>
+                )}
+              </div>
             ) : (
               <button onClick={() => setPage('login')} style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', background: 'none', border: '1px solid rgba(255,255,255,0.2)', padding: '7px 16px', borderRadius: 4, cursor: 'pointer', transition: 'all 0.2s' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)'; e.currentTarget.style.color = '#fff' }}
@@ -147,8 +201,8 @@ export default function App() {
                 {link.label}
               </a>
             ))}
-            <button onClick={() => { setMenuOpen(false); setPage('login') }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 0', fontSize: 15, fontWeight: 500, color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
-              {profile?.role === 'admin' ? '⚙ Admin' : 'Sign In'}
+            <button onClick={() => { setMenuOpen(false); if (profile?.role === 'admin') setPage('admin'); else if (profile) logout(); else setPage('login') }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 0', fontSize: 15, fontWeight: 500, color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
+              {profile?.role === 'admin' ? '⚙ Admin' : profile ? 'Sign Out' : 'Sign In'}
             </button>
           </div>
         )}
@@ -243,8 +297,9 @@ export default function App() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 28 }}>
               {events.map(event => (
-                <div key={event.id}
-                  style={{ backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 16px rgba(15,37,96,0.08)', transition: 'all 0.25s', cursor: 'default', borderTop: `4px solid ${event.tag_color}` }}
+                <div key={event.id} onClick={() => { setSelectedEvent(event); setRegistrationError('') }}
+                  role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedEvent(event); setRegistrationError('') } }}
+                  style={{ backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 16px rgba(15,37,96,0.08)', transition: 'all 0.25s', cursor: 'pointer', borderTop: `4px solid ${event.tag_color}` }}
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 36px rgba(15,37,96,0.15)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 16px rgba(15,37,96,0.08)' }}>
                   {event.image_url && <img src={event.image_url} alt={event.title} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />}
@@ -256,6 +311,7 @@ export default function App() {
                     <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, fontWeight: 700, color: '#0f2560', marginBottom: 12, lineHeight: 1.3 }}>{event.title}</h3>
                     {event.location && <div style={{ fontSize: 13, color: '#8a8a9a', marginBottom: 8 }}>📍 {event.location}</div>}
                     <p style={{ fontSize: 15, lineHeight: 1.7, color: '#5a5a6a' }}>{event.description}</p>
+                    <div style={{ marginTop: 18, fontSize: 13, fontWeight: 700, color: registeredEventIds.has(event.id) ? '#2a9d8f' : '#0f2560' }}>{registeredEventIds.has(event.id) ? '✓ You are registered' : 'View event & register →'}</div>
                   </div>
                 </div>
               ))}
@@ -308,12 +364,12 @@ export default function App() {
             <p style={{ fontSize: 17, color: '#6a6a7a', maxWidth: 480, margin: '0 auto' }}>Dedicated students working to make AzSoc a welcoming home away from home.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 24 }}>
-            {COMMITTEE.map(member => (
+            {committee.map(member => (
               <div key={member.name} style={{ textAlign: 'center', padding: '32px 20px 28px', backgroundColor: '#f8f5f0', borderRadius: 8, transition: 'all 0.25s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 32px rgba(15,37,96,0.12)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}>
                 <div style={{ width: 72, height: 72, borderRadius: '50%', backgroundColor: '#0f2560', color: '#c9a84c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Playfair Display, serif', fontSize: 22, fontWeight: 700, margin: '0 auto 16px', border: '2px solid #c9a84c' }}>
-                  {member.initial}
+                  {member.name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 600, color: '#0f2560', marginBottom: 6 }}>{member.name}</div>
                 <div style={{ fontSize: 13, color: '#c0392b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{member.role}</div>
@@ -417,6 +473,32 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      {/* ── EVENT DETAILS ── */}
+      {selectedEvent && (
+        <div onClick={event => { if (event.target === event.currentTarget) setSelectedEvent(null) }} style={{ position: 'fixed', inset: 0, zIndex: 250, backgroundColor: 'rgba(5,15,45,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="event-modal-title" style={{ width: '100%', maxWidth: 560, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 28px 80px rgba(0,0,0,0.4)' }}>
+            {selectedEvent.image_url && <img src={selectedEvent.image_url} alt="" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />}
+            <div style={{ padding: '32px 36px 36px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'flex-start', marginBottom: 14 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: selectedEvent.tag_color, backgroundColor: `${selectedEvent.tag_color}15`, padding: '4px 10px', borderRadius: 3 }}>{selectedEvent.tag}</span>
+                <button onClick={() => setSelectedEvent(null)} aria-label="Close event details" style={{ border: 'none', background: 'none', fontSize: 24, lineHeight: 1, color: '#6a6a7a', cursor: 'pointer' }}>×</button>
+              </div>
+              <h2 id="event-modal-title" style={{ fontFamily: 'Playfair Display, serif', fontSize: 30, lineHeight: 1.2, color: '#0f2560', marginBottom: 14 }}>{selectedEvent.title}</h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 14, color: '#6a6a7a', marginBottom: 20 }}><span>📅 {selectedEvent.date}</span>{selectedEvent.location && <span>📍 {selectedEvent.location}</span>}</div>
+              <p style={{ fontSize: 16, lineHeight: 1.7, color: '#4a4a5a', marginBottom: 26 }}>{selectedEvent.description}</p>
+              {registrationError && <div style={{ marginBottom: 16, padding: '10px 12px', backgroundColor: '#fef2f2', color: '#c0392b', borderRadius: 5, fontSize: 14 }}>{registrationError}</div>}
+              {registeredEventIds.has(selectedEvent.id) ? (
+                <div style={{ padding: '13px 16px', borderRadius: 6, textAlign: 'center', backgroundColor: '#eef8f6', color: '#176b60', fontWeight: 700 }}>✓ You are registered for this event</div>
+              ) : (
+                <button onClick={registerForSelectedEvent} disabled={registering} style={{ width: '100%', padding: 14, border: 'none', borderRadius: 6, backgroundColor: registering ? '#93a3c8' : '#0f2560', color: '#fff', fontSize: 14, fontWeight: 700, cursor: registering ? 'not-allowed' : 'pointer' }}>
+                  {registering ? 'Registering…' : profile ? 'Register for this event' : 'Sign in to register'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── FOOTER ── */}
       <footer style={{ backgroundColor: '#0a1a42', borderTop: '1px solid rgba(201,168,76,0.2)', padding: '48px 24px 32px' }}>

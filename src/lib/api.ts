@@ -22,10 +22,27 @@ export type AzEvent = {
 };
 
 export type ContactMessage = {
+  id: string;
   name: string;
   email: string;
   year: string;
   message: string;
+  created_at: string;
+};
+
+export type CommitteeMember = {
+  id: string;
+  name: string;
+  role: string;
+  display_order: number;
+  created_at: string;
+};
+
+export type EventRegistration = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  created_at: string;
 };
 
 function requireConfiguration() {
@@ -107,6 +124,27 @@ export const api = {
     return { ok: true };
   },
 
+  getMyEventRegistrations: async () => {
+    requireConfiguration();
+    const { data, error } = await supabase.from("event_registrations").select("id, event_id, user_id, created_at");
+    throwIfError(error);
+    return { registrations: (data || []) as EventRegistration[] };
+  },
+
+  registerForEvent: async (eventId: string) => {
+    requireConfiguration();
+    const { data, error } = await supabase.functions.invoke("register-for-event", { body: { eventId } });
+    if (error) {
+      const response = "context" in error ? error.context : null;
+      if (response instanceof Response) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        if (body?.error) throw new Error(body.error);
+      }
+      throw new Error("Registration service is unavailable. Please try again.");
+    }
+    return { registration: data.registration as EventRegistration };
+  },
+
   getMembers: async (_token: string | undefined) => {
     requireConfiguration();
     const { data, error } = await supabase.from("profiles").select("id, email, full_name, role, created_at").order("created_at", { ascending: true });
@@ -121,10 +159,45 @@ export const api = {
     return { member: data as Profile };
   },
 
-  createContactMessage: async (message: ContactMessage) => {
+  getCommitteeMembers: async () => {
+    requireConfiguration();
+    const { data, error } = await supabase.from("committee_members").select("*").order("display_order", { ascending: true });
+    throwIfError(error);
+    return { members: (data || []) as CommitteeMember[] };
+  },
+
+  createCommitteeMember: async (member: Pick<CommitteeMember, "name" | "role" | "display_order">) => {
+    requireConfiguration();
+    const { data, error } = await supabase.from("committee_members").insert(member).select().single();
+    throwIfError(error);
+    return { member: data as CommitteeMember };
+  },
+
+  updateCommitteeMember: async (id: string, member: Partial<Pick<CommitteeMember, "name" | "role" | "display_order">>) => {
+    requireConfiguration();
+    const { data, error } = await supabase.from("committee_members").update(member).eq("id", id).select().single();
+    throwIfError(error);
+    return { member: data as CommitteeMember };
+  },
+
+  deleteCommitteeMember: async (id: string) => {
+    requireConfiguration();
+    const { error } = await supabase.from("committee_members").delete().eq("id", id);
+    throwIfError(error);
+    return { ok: true };
+  },
+
+  createContactMessage: async (message: Omit<ContactMessage, "id" | "created_at">) => {
     requireConfiguration();
     const { error } = await supabase.from("contact_messages").insert(message);
     throwIfError(error);
     return { ok: true };
+  },
+
+  getContactMessages: async () => {
+    requireConfiguration();
+    const { data, error } = await supabase.from("contact_messages").select("*").order("created_at", { ascending: false });
+    throwIfError(error);
+    return { messages: (data || []) as ContactMessage[] };
   },
 };

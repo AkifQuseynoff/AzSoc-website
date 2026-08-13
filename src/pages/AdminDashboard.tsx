@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { api, type AzEvent, type Profile } from "@/lib/api";
+import { api, type AzEvent, type CommitteeMember, type ContactMessage, type Profile } from "@/lib/api";
 import logoSrc from "@/imports/UoE_AzSoc_LOGO.png";
 
 const TAG_OPTIONS = [
@@ -14,13 +14,15 @@ const TAG_OPTIONS = [
 
 const EMPTY_EVENT = { title: "", description: "", date: "", location: "", tag: "Social", tag_color: "#c0392b", image_url: "", is_featured: false };
 
-type Tab = "events" | "members" | "settings";
+type Tab = "events" | "members" | "committee" | "messages" | "settings";
 
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const { profile, token, logout } = useAuth();
   const [tab, setTab] = useState<Tab>("events");
   const [events, setEvents] = useState<AzEvent[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
+  const [committee, setCommittee] = useState<CommitteeMember[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AzEvent | null>(null);
@@ -43,12 +45,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   async function loadData() {
     setLoading(true);
     try {
-      const [evRes, memRes] = await Promise.all([
+      const [evRes, memRes, committeeRes, messageRes] = await Promise.all([
         api.getEvents(),
         token ? api.getMembers(token).catch(() => ({ members: [] })) : Promise.resolve({ members: [] }),
+        api.getCommitteeMembers().catch(() => ({ members: [] })),
+        token ? api.getContactMessages().catch(() => ({ messages: [] })) : Promise.resolve({ messages: [] }),
       ]);
       setEvents(evRes.events || []);
       setMembers(memRes.members || []);
+      setCommittee(committeeRes.members || []);
+      setMessages(messageRes.messages || []);
     } catch {}
     setLoading(false);
   }
@@ -97,6 +103,33 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     try { await api.updateMemberRole(token, id, role); await loadData(); } catch {}
   }
 
+  async function addCommitteeMember() {
+    const name = window.prompt("Committee member name:");
+    if (!name?.trim()) return;
+    const role = window.prompt("Committee role:");
+    if (!role?.trim()) return;
+    try {
+      await api.createCommitteeMember({ name: name.trim(), role: role.trim(), display_order: committee.length + 1 });
+      await loadData();
+    } catch (e: any) { window.alert(e.message); }
+  }
+
+  async function editCommitteeMember(member: CommitteeMember) {
+    const name = window.prompt("Committee member name:", member.name);
+    if (!name?.trim()) return;
+    const role = window.prompt("Committee role:", member.role);
+    if (!role?.trim()) return;
+    try {
+      await api.updateCommitteeMember(member.id, { name: name.trim(), role: role.trim() });
+      await loadData();
+    } catch (e: any) { window.alert(e.message); }
+  }
+
+  async function deleteCommitteeMember(member: CommitteeMember) {
+    if (!window.confirm(`Remove ${member.name} from the public committee?`)) return;
+    try { await api.deleteCommitteeMember(member.id); await loadData(); } catch (e: any) { window.alert(e.message); }
+  }
+
   const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 14px", border: "1.5px solid #dde", borderRadius: 6, fontSize: 14, outline: "none", fontFamily: "inherit", backgroundColor: "#fafafa" };
 
   return (
@@ -118,6 +151,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           {([
             { id: "events", icon: "📅", label: "Events" },
             { id: "members", icon: "👥", label: "Members" },
+            { id: "committee", icon: "🏛️", label: "Committee" },
+            { id: "messages", icon: "✉️", label: "Messages" },
             { id: "settings", icon: "⚙️", label: "Settings" },
           ] as { id: Tab; icon: string; label: string }[]).map(item => (
             <button key={item.id} onClick={() => setTab(item.id)}
@@ -241,6 +276,62 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Committee Tab ── */}
+        {tab === "committee" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+              <div>
+                <h1 style={{ fontFamily: "Playfair Display, serif", fontSize: 32, fontWeight: 700, color: "#0f2560", marginBottom: 4 }}>Public Committee</h1>
+                <p style={{ fontSize: 15, color: "#6a6a7a" }}>These people are displayed in the Committee section of the public website.</p>
+              </div>
+              <button onClick={addCommitteeMember} style={{ backgroundColor: "#0f2560", color: "#fff", border: "none", padding: "12px 24px", borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>+ Add Committee Member</button>
+            </div>
+            <div style={{ backgroundColor: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 2px 12px rgba(15,37,96,0.08)" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr style={{ backgroundColor: "#f8f5f0", borderBottom: "2px solid #eee" }}>
+                  {["Name", "Public Role", "Actions"].map(h => <th key={h} style={{ padding: "14px 20px", textAlign: "left", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6a6a7a" }}>{h}</th>)}
+                </tr></thead>
+                <tbody>{committee.map((member, index) => (
+                  <tr key={member.id} style={{ borderBottom: index < committee.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                    <td style={{ padding: "16px 20px", fontSize: 14, fontWeight: 600, color: "#1a1a2e" }}>{member.name}</td>
+                    <td style={{ padding: "16px 20px", fontSize: 14, color: "#c0392b", fontWeight: 600 }}>{member.role}</td>
+                    <td style={{ padding: "12px 20px", display: "flex", gap: 8 }}>
+                      <button onClick={() => editCommitteeMember(member)} style={{ padding: "7px 12px", border: "1.5px solid #0f2560", borderRadius: 5, background: "transparent", color: "#0f2560", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                      <button onClick={() => deleteCommitteeMember(member)} style={{ padding: "7px 12px", border: "1.5px solid #fecaca", borderRadius: 5, background: "transparent", color: "#c0392b", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Messages Tab ── */}
+        {tab === "messages" && (
+          <div>
+            <div style={{ marginBottom: 32 }}>
+              <h1 style={{ fontFamily: "Playfair Display, serif", fontSize: 32, fontWeight: 700, color: "#0f2560", marginBottom: 4 }}>Contact Messages</h1>
+              <p style={{ fontSize: 15, color: "#6a6a7a" }}>{messages.length} message{messages.length !== 1 ? "s" : ""} received through the website.</p>
+            </div>
+            {messages.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 72, backgroundColor: "#fff", borderRadius: 10, color: "#6a6a7a" }}>No contact messages yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 16 }}>
+                {messages.map(message => (
+                  <article key={message.id} style={{ backgroundColor: "#fff", borderRadius: 10, padding: "24px 28px", boxShadow: "0 2px 12px rgba(15,37,96,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginBottom: 12 }}>
+                      <div><strong style={{ color: "#0f2560" }}>{message.name}</strong><span style={{ color: "#6a6a7a" }}> · {message.email}</span></div>
+                      <time style={{ color: "#8a8a9a", fontSize: 13 }}>{new Date(message.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</time>
+                    </div>
+                    {message.year && <div style={{ color: "#8a8a9a", fontSize: 13, marginBottom: 10 }}>{message.year}</div>}
+                    <p style={{ margin: 0, color: "#3a3a4a", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{message.message}</p>
+                  </article>
+                ))}
               </div>
             )}
           </div>
