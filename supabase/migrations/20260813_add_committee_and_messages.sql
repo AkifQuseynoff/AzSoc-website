@@ -21,6 +21,9 @@ from (values
 where not exists (select 1 from public.committee_members);
 
 alter table public.committee_members enable row level security;
+-- Ensure policies are idempotent when running migrations multiple times
+drop policy if exists "Public can read committee members" on public.committee_members;
+drop policy if exists "Admins manage committee members" on public.committee_members;
 
 create policy "Public can read committee members"
   on public.committee_members for select using (true);
