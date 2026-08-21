@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import logoSrc from '@/imports/UoE_AzSoc_LOGO.png'
 import { useAuth } from '@/context/AuthContext'
 import LoginPage from '@/pages/LoginPage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import AdminDashboard from '@/pages/AdminDashboard'
 import { api, type AzEvent, type CommitteeMember } from '@/lib/api'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
@@ -32,10 +33,10 @@ const FALLBACK_COMMITTEE: CommitteeMember[] = [
   { id: '6', name: 'Tural Rzayev', role: 'Outreach Officer', display_order: 6, created_at: '' },
 ]
 
-type Page = 'site' | 'login' | 'admin'
+type Page = 'site' | 'login' | 'admin' | 'reset-password'
 
 export default function App() {
-  const { profile, loading: authLoading, logout } = useAuth()
+  const { profile, loading: authLoading, logout, passwordRecovery } = useAuth()
   const [page, setPage] = useState<Page>('site')
   const [menuOpen, setMenuOpen] = useState(false)
   const [memberMenuOpen, setMemberMenuOpen] = useState(false)
@@ -115,6 +116,10 @@ export default function App() {
     if (page === 'admin' && profile?.role !== 'admin') setPage('site')
   }, [profile, page])
 
+  useEffect(() => {
+    if (passwordRecovery) setPage('reset-password')
+  }, [passwordRecovery])
+
   if (authLoading) return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a1a42', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <img src={logoSrc} alt="Loading" style={{ width: 80, height: 80, borderRadius: '50%', opacity: 0.7, animation: 'spin 1.5s linear infinite' }} />
@@ -124,6 +129,7 @@ export default function App() {
 
   if (page === 'login') return <LoginPage onBack={() => setPage('site')} />
   if (page === 'admin') return <AdminDashboard onBack={() => setPage('site')} />
+  if (page === 'reset-password') return <ResetPasswordPage onDone={() => setPage('site')} />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
