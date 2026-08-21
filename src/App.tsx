@@ -507,7 +507,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── FOOTER ── */}
+{/* ── FOOTER ── */}
       <footer style={{ backgroundColor: '#0a1a42', borderTop: '1px solid rgba(201,168,76,0.2)', padding: '48px 24px 32px' }}>
         <div style={{ display: 'flex', height: 3, maxWidth: 1160, margin: '0 auto 40px' }}>
           <div style={{ flex: 1, backgroundColor: '#0092BC' }} />
@@ -553,7 +553,16 @@ export default function App() {
               Member Login →
             </button>
           </div>
+          
+          {/* 🚀 ADDED THIS SECTION FOR JS.ORG APPROVAL */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>Project Tech</div>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6, margin: 0 }}>
+              An open-source web application designed and built entirely using <strong>JavaScript</strong>, <strong>React</strong>, and <strong>Vite</strong>. Hosted on Vercel infrastructure.
+            </p>
+          </div>
         </div>
+        
         <div style={{ maxWidth: 1160, margin: '0 auto', paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>© 2025–26 Azerbaijan Society, University of Edinburgh. All rights reserved.</div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>Affiliated with EUSA</div>
@@ -568,3 +577,4 @@ export default function App() {
     </div>
   )
 }
+
