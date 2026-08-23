@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://uoeazerbaijan.vercel.app/sitemap.xml
+Sitemap: https://www.uoe-azerbaijansociety.uk/sitemap.xml
