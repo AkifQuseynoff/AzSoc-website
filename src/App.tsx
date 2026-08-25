@@ -708,9 +708,8 @@ const styles = `
     background: #08004F;
     color: #fff;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px clamp(28px, 9vw, 180px);
+    align-items: left;
+justify-content: flex-end;    padding: 20px clamp(28px, 9vw, 180px);
     
     gap: 16px;
   }
