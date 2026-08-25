@@ -856,7 +856,6 @@ const styles = `
     flex-direction: column;
   }
   .az-hero-left::after {
-    content: "background image placeholder";
     position: absolute;
     bottom: 10px;
     left: 14px;
@@ -1006,6 +1005,7 @@ font-weight: 600;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,.05);
     background: #fff;
+    max-width:260px;
     cursor: pointer;
     transition: transform .2s, box-shadow .2s;
   }
