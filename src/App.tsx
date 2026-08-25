@@ -37,8 +37,8 @@ type SocialLink = {
 };
 
 const SOCIALS: SocialLink[] = [
-  { label: "Instagram", href: "#" },
-  { label: "LinkedIn", href: "#" },
+  { label: "Instagram", href: "https://www.instagram.com/uoe.azerbaijan/" },
+  { label: "LinkedIn", href: "https://www.linkedin.com/company/azerbaijan-society-university-of-edinburgh" },
 ];
 
 /* ---------- Data ---------- */
@@ -542,8 +542,7 @@ export default function App() {
             <ul className="az-contact-list">
               <li>
                 <span className="az-contact-label">Email</span>
-                azerbaijan.society@ed.ac.uk
-              </li>
+azerbaijanisociety.uoe@gmail.com              </li>
              
             </ul>
 
@@ -645,9 +644,8 @@ export default function App() {
 
           <div className="az-footer-col">
             <h4>Contact</h4>
-            <a href="mailto:azerbaijan.society@ed.ac.uk">
-              azerbaijan.society@ed.ac.uk
-            </a>
+            <a href="mailto:azerbaijanisociety.uoe@gmail.com">
+azerbaijanisociety.uoe@gmail.com            </a>
           </div>
 
           <div className="az-footer-col">
