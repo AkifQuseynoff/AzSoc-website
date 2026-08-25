@@ -51,9 +51,9 @@ const NAV_LINKS: NavLink[] = [
 ];
 
 const STATS = [
-  { num: "200+", label: "Members" },
+  { num: "100+", label: "Members" },
   { num: "20+", label: "Events / year" },
-  { num: "15+", label: "Nationalities" },
+  { num: "10+", label: "Nationalities" },
   { num: "5", label: "Years running" },
 ];
 
