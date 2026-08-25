@@ -541,14 +541,14 @@ export default function App() {
 
             <ul className="az-contact-list">
               <li>
-                <span className="az-contact-label">Email</span>
+                <span className="az-contact-label" target="_blank" >Email</span>
 azerbaijanisociety.uoe@gmail.com              </li>
              
             </ul>
 
             <div className="az-contact-socials">
               {SOCIALS.map((s) => (
-                <a key={s.label} href={s.href} className="az-social-link">
+                <a key={s.label} href={s.href} target="_blank"  className="az-social-link">
                   {s.label}
                 </a>
               ))}
@@ -636,7 +636,7 @@ azerbaijanisociety.uoe@gmail.com              </li>
           <div className="az-footer-col">
             <h4>Follow</h4>
             {SOCIALS.map((s) => (
-              <a key={s.label} href={s.href}>
+              <a key={s.label} href={s.href} target="_blank"  >
                 {s.label}
               </a>
             ))}
@@ -644,7 +644,7 @@ azerbaijanisociety.uoe@gmail.com              </li>
 
           <div className="az-footer-col">
             <h4>Contact</h4>
-            <a href="mailto:azerbaijanisociety.uoe@gmail.com">
+            <a href="mailto:azerbaijanisociety.uoe@gmail.com" target="_blank" >
 azerbaijanisociety.uoe@gmail.com            </a>
           </div>
 
