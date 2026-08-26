@@ -521,7 +521,15 @@ export default function App() {
             is free through EUSA.
           </p>
           <div className="az-join-actions">
-           
+                       <a
+              href="https://www.eusa.ed.ac.uk/shop/product/17103-"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="az-join-cta"
+            >
+              Join on EUSA
+            </a>
+
             <button type="button" className="az-join-secondary" onClick={() => setPage('login')}>
               {profile ? 'Member Dashboard' : 'Member Login'}
             </button>
