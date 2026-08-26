@@ -530,9 +530,7 @@ export default function App() {
               Join on EUSA
             </a>
 
-            <button type="button" className="az-join-secondary" onClick={() => setPage('login')}>
-              {profile ? 'Member Dashboard' : 'Member Login'}
-            </button>
+
           </div>
         </div>
       </section>
