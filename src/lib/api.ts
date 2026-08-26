@@ -98,6 +98,23 @@ export const api = {
     return { user: data.user, session: data.session, profile: await getProfile(data.user.id) };
   },
 
+  requestPasswordReset: async (email: string) => {
+    requireConfiguration();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}${window.location.pathname}`,
+    });
+    throwIfError(error);
+    return { ok: true };
+  },
+
+  updatePassword: async (newPassword: string) => {
+    requireConfiguration();
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    throwIfError(error);
+    if (!data.user) throw new Error("Unable to update password. Try requesting a new reset link.");
+    return { user: data.user, profile: await getProfile(data.user.id) };
+  },
+
   me: async (token?: string) => {
     requireConfiguration();
     const { data, error } = token ? await supabase.auth.getUser(token) : await supabase.auth.getUser();

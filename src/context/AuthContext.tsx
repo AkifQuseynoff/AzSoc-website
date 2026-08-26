@@ -40,16 +40,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    restoreSession();
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const queryParams = new URLSearchParams(window.location.search);
+    const isRecovery = hashParams.get("type") === "recovery" || queryParams.get("type") === "recovery";
+
+    if (isRecovery) {
+      // Don't auto-login via restoreSession — Supabase's client already
+      // holds this recovery session internally, which is all
+      // updatePassword() needs later.
+      if (active) setState(prev => ({ ...prev, loading: false, passwordRecovery: true }));
+    } else {
+      restoreSession();
+    }
+
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (!active) return;
       if (event === "SIGNED_OUT") {
         setState(prev => ({ ...prev, token: null, profile: null, loading: false, passwordRecovery: false }));
       }
       if (event === "PASSWORD_RECOVERY") {
-        // Fired when the user lands back on the app after clicking the
-        // reset-password link in their email. App.tsx watches this flag
-        // to route them to the "set a new password" screen.
         setState(prev => ({ ...prev, loading: false, passwordRecovery: true }));
       }
     });
